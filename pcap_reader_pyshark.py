@@ -2,13 +2,14 @@ import pyshark, glob, struct, os, sys, tqdm
 from constants import PRETTY_NAMES
 from binascii import hexlify
 import numpy as np
+
 endian = '>'
 verbose = False
 
 
 def verbose_print(*args, **kwargs):
     global verbose
-    if verbose: print(args, kwargs)
+    if verbose: print(*args, **kwargs)
 
 
 def pretty_name(name_type, name_value):
@@ -43,45 +44,31 @@ def parse_extension(payload, type_name, offset):
     offset_beg = offset
     entries = []
     pretty_entries = []
-    format_list_length = 'H'
-    format_entry = 'B'
-    list_length = 0
-    if type_name == 'elliptic_curves':
-        format_list_length = 'H'
-        format_entry = 'H'
-    if type_name == 'ec_point_formats':
-        format_list_length = 'B'
-    if type_name == 'compression_methods':
-        format_list_length = 'B'
-        format_entry = 'B'
-    if type_name == 'heartbeat':
-        format_list_length = 'B'
-        format_entry = 'B'
-    if type_name == 'next_protocol_negotiation':
-        format_entry = 'p'
-    else:
-        if len(payload) > 1:  # contents are a list
-            list_length, payload, offset = unpacker(format_list_length, payload, offset)
 
+    format_list_length, format_entry = {
+        'elliptic_curves': 'HH',
+        'ec_point_formats': 'HB',
+        'compression_methods': 'BB',
+        'heartbeat': 'BB',
+        'next_protocol_negotiation': 'Hp',
+        'cipher_suites': 'HH',
+        'supported_groups': 'HH',
+        'signature_algorithms': 'HH',
+        'renegotiation_info': 'HB',
+        'status_request': 'HH',
+        'status_request_v2': 'HH'
+    }.get(type_name, "HB")
+
+    if type_name != "next_protocol_negotiation" and len(payload) > 1:  # contents are a list
+        list_length, payload, offset = unpacker(format_list_length, payload, offset)
+        if list_length: payload = payload[:list_length]
     if type_name == 'status_request' or type_name == 'status_request_v2':
         _type, payload, offset = unpacker('B', payload, offset)
-        format_entry = 'H'
     if type_name == 'padding':
         return payload, hexlify(payload), (offset_beg, offset)
     if type_name == 'SessionTicket_TLS':
         return payload, hexlify(payload), (offset_beg, offset)
-    if type_name == 'cipher_suites':
-        format_entry = 'H'
-    if type_name == 'supported_groups':
-        format_entry = 'H'
-    if type_name == 'signature_algorithms':
-        format_entry = 'H'
-    if type_name == 'cipher_suites':
-        format_entry = 'H'
-    if type_name == 'renegotiation_info':
-        format_entry = 'B'
-    if list_length:
-        payload = payload[:list_length]
+
     offset_beg = offset
     while len(payload) > 0:
         if type_name == 'server_name':
@@ -114,7 +101,8 @@ class Extension(object):
         self.offset_beg = self.offset_end = offset
         self._data, self._pretty_data = None, None
         if self.length > 0:
-            self._data, self._pretty_data, (self.offset_beg, self.offset_end) = parse_extension(payload[:self.length], self.type_name, offset)
+            self._data, self._pretty_data, (self.offset_beg, self.offset_end) = parse_extension(payload[:self.length],
+                                                                                                self.type_name, offset)
 
     def __str__(self):
         return f"{self.offset_beg}:{self.offset_end} {self.type_name}: {self._pretty_data}"
@@ -152,7 +140,8 @@ def make_data(pcap_name):
                         if "handshake_extensions_server_name" in packet_pre.ssl.field_names:
                             verbose_print(", SNI='%s'" % packet_pre.ssl.handshake_extensions_server_name, end="")
                             record_raw, record_ofs, record_len = packet_raw.ssl.record_raw[: 3]
-                            comp_len_raw, comp_len_ofs, comp_len_len = packet_raw.ssl.record.handshake.comp_methods_length_raw[: 3]
+                            comp_len_raw, comp_len_ofs, comp_len_len = packet_raw.ssl.record.handshake.comp_methods_length_raw[
+                                                                       : 3]
                             handshake_raw, handshake_ofs, handshake_len = packet_raw.ssl.record.handshake_raw[: 3]
                             comp_len = unpacker('B', bytes.fromhex(comp_len_raw))[0]
                             start = int(comp_len_ofs) - int(handshake_ofs) + int(comp_len_len) + comp_len
@@ -164,7 +153,7 @@ def make_data(pcap_name):
                                     #     handshake_ofs) - int(record_ofs) + extension.offset_end]
                                     # verbose_print(unpacker('P', sni))
                                     client_hello['sni'] = (
-                                        int(handshake_ofs) - int(record_ofs) + extension.offset_beg + 2, 
+                                        int(handshake_ofs) - int(record_ofs) + extension.offset_beg + 2,
                                         int(handshake_ofs) - int(record_ofs) + extension.offset_end)
                                     break
                             streams[conn_c2s] = {"client_hello": client_hello}
@@ -202,26 +191,42 @@ def crop_data(data: bytes, size=256):
 
 
 if __name__ == '__main__':
-    data_X, data_y = [], []
+    # Test
+    # for i in range(3):
+    #     make_data(glob.glob("/home/zzy/2021known/youtube/*")[i])
+
+    data_X_SNI, data_X, data_y = [], [], []
     application_list = glob.glob("/home/zzy/2021known/*")
-    for app_id, application in enumerate(application_list[:3]):
+    for app_id, application in enumerate(application_list[:10]):
         if os.path.exists(os.path.join(application, 'TCP')):
             application = os.path.join(application, 'TCP')
-        features = []
-        for pcap in tqdm.tqdm(glob.glob(application + "/*")[:50]):
+        features_SNI, features = [], []
+        for pcap in tqdm.tqdm(glob.glob(application + "/*")):
             for conn, data in make_data(pcap).items():
-                feature = np.array([
-                    list(crop_data(data['client_hello']['data'])),
+                data_client_hello = data['client_hello']['data']
+
+                features_SNI.append(np.array([
+                    list(crop_data(data_client_hello)),
                     list(crop_data(data['server_hello']['data'])),
                     list(crop_data(data['other']['data']))
-                ])
-                features.append(feature)
+                ]))
+
+                sni_beg, sni_end = data['client_hello']['sni']
+                data_client_hello = data_client_hello[:sni_beg] + \
+                    b'0' * (sni_end - sni_beg) + data_client_hello[sni_end:]
+
+                features.append(np.array([
+                    list(crop_data(data_client_hello)),
+                    list(crop_data(data['server_hello']['data'])),
+                    list(crop_data(data['other']['data']))
+                ]))
+
+        data_X_SNI.append(np.array(features_SNI))
         data_X.append(np.array(features))
         data_y.append(np.full(len(features), app_id))
         print(data_X[-1].shape, data_y[-1].shape)
-    data_X, data_y = np.vstack(data_X), np.hstack(data_y)
-    np.save('/home/lsy/workspace/traffic/data_X.npy', data_X)
-    np.save('/home/lsy/workspace/traffic/data_y.npy', data_y)
-    np.save('/home/lsy/workspace/traffic/app_table.npy', np.array(application_list))
-
-
+    data_X, data_X_SNI, data_y = np.vstack(data_X), np.vstack(data_X_SNI), np.hstack(data_y)
+    np.save(f'/home/lsy/workspace/traffic/data_sni_X.npy', data_X_SNI)
+    np.save(f'/home/lsy/workspace/traffic/data_X.npy', data_X)
+    np.save(f'/home/lsy/workspace/traffic/data_y.npy', data_y)
+    np.save(f'/home/lsy/workspace/traffic/app_table.npy', np.array(application_list))
