@@ -1,0 +1,25 @@
+nohup: ignoring input
+ 21%|██        | 221/1078 [08:54<27:48,  1.95s/it]Unknown child process pid 72224, will report returncode 255
+ 21%|██        | 221/1078 [08:57<34:46,  2.43s/it]
+Traceback (most recent call last):
+  File "/home/lsy/workspace/hide_sni/make_data.py", line 205, in <module>
+    for conn, data in make_data(pcap).items():
+  File "/home/lsy/workspace/hide_sni/make_data.py", line 185, in make_data
+    pcap_pre.close()
+  File "/home/lsy/environment/anaconda3/envs/python39/lib/python3.9/site-packages/pyshark/capture/capture.py", line 436, in close
+    self.eventloop.run_until_complete(self.close_async())
+  File "/home/lsy/environment/anaconda3/envs/python39/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+    return future.result()
+  File "/home/lsy/environment/anaconda3/envs/python39/lib/python3.9/site-packages/pyshark/capture/capture.py", line 440, in close_async
+    await self._cleanup_subprocess(process)
+  File "/home/lsy/environment/anaconda3/envs/python39/lib/python3.9/site-packages/pyshark/capture/capture.py", line 431, in _cleanup_subprocess
+    raise TSharkCrashException("TShark seems to have crashed (retcode: %d). "
+pyshark.capture.capture.TSharkCrashException: TShark seems to have crashed (retcode: 255). Try rerunning in debug mode [ capture_obj.set_debug() ] or try updating tshark.
+Exception ignored in: <function Capture.__del__ at 0x7f308f9770d0>
+Traceback (most recent call last):
+  File "/home/lsy/environment/anaconda3/envs/python39/lib/python3.9/site-packages/pyshark/capture/capture.py", line 445, in __del__
+  File "/home/lsy/environment/anaconda3/envs/python39/lib/python3.9/site-packages/pyshark/capture/capture.py", line 436, in close
+  File "/home/lsy/environment/anaconda3/envs/python39/lib/python3.9/asyncio/base_events.py", line 642, in run_until_complete
+  File "/home/lsy/environment/anaconda3/envs/python39/lib/python3.9/site-packages/pyshark/capture/capture.py", line 440, in close_async
+  File "/home/lsy/environment/anaconda3/envs/python39/lib/python3.9/site-packages/pyshark/capture/capture.py", line 431, in _cleanup_subprocess
+pyshark.capture.capture.TSharkCrashException: TShark seems to have crashed (retcode: 255). Try rerunning in debug mode [ capture_obj.set_debug() ] or try updating tshark.
